@@ -1,0 +1,159 @@
+{
+  "name": "Graph Search Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "searchTerm"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1096ac49-fe70-4307-a659-3976210c3307",
+      "name": "When Executed by Another Workflow",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": "MATCH (a)-[r]->(b) WHERE (a:LifeScienceEntity OR a:Method OR a:Field OR a:ScientificConcept)   AND (b:LifeScienceEntity OR b:Method OR b:Field OR b:ScientificConcept)   AND (     toLower(a.name) CONTAINS toLower($searchTerm)     OR toLower(b.name) CONTAINS toLower($searchTerm)   ) RETURN   a.name AS concept,   coalesce(r.type, type(r)) AS relationship,   b.name AS relatedConcept LIMIT 10"
+            },
+            {
+              "name": "parameters",
+              "value": "={{ { searchTerm: $json.searchTerm } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "5f0897fd-3f25-4125-944a-c97e583b7f5e",
+      "name": "Neo4j - Graph Search",
+      "notesInFlow": false,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hent resultatet fra Neo4j\nconst data = $input.first().json.data;\n\n// Hent kolonnenavne og resultater\nconst fields = data.fields;\nconst values = data.values;\n\n// Omdan hver række til et objekt\nconst relationships = values.map(row => {\n  const relationship = {};\n\n  fields.forEach((field, index) => {\n    relationship[field] = row[index];\n  });\n\n  return relationship;\n});\n\n// Send resultaterne videre til AI-agenten\nreturn [\n  {\n    json: {\n      relationships: relationships\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "024cebbf-2a9c-4030-8016-82731c19ca39",
+      "name": "Prepare Graph Results"
+    },
+    {
+      "parameters": {
+        "content": "Modtager søgeord fra AI-agenten.",
+        "height": 112,
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        -80
+      ],
+      "id": "e247b287-9bf7-437f-a273-f3667a2d52c8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Søger efter begreber og relationer i Neo4j.",
+        "height": 112,
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -112
+      ],
+      "id": "66c292c3-377e-4c56-afe8-e3fab77805ed",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Formaterer søgeresultaterne og sender dem tilbage til AI-agenten.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        -160
+      ],
+      "id": "de4a8e3c-4b33-4830-8b2e-d1cd7834d733",
+      "name": "Sticky Note2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Graph Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Graph Search": {
+      "main": [
+        [
+          {
+            "node": "Prepare Graph Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4cb10043-1911-40da-ba4a-1684eb8a57be",
+  "meta": {
+    "instanceId": "d06d9bb05728dfe923fddf1a8ae4febda352b0dd4d377fa2fb8312600e8bde79"
+  },
+  "nodeGroups": [],
+  "id": "xUHaWEsjlepGur43",
+  "tags": []
+}

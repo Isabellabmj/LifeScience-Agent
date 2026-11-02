@@ -1,0 +1,210 @@
+{
+  "name": "Vector Search Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "question"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "715a3428-880b-45fb-9144-4da2dbceeb39",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $json.question }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8568c65c-f712-456d-b4b0-59a270732b6e",
+      "name": "HTTP Request",
+      "credentials": {
+        "openAiApi": {
+          "id": "gE9cN9UBGAhgqK71",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "\thttp://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": "CALL db.index.vector.queryNodes(   'document_chunk_vector_index',   5,   $embedding ) YIELD node, score RETURN   node.text AS text,   node.source AS source,   node.subject AS subject,   score ORDER BY score DESC"
+            },
+            {
+              "name": "parameters",
+              "value": "={{ { embedding: $json.data[0].embedding } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "49d15625-ccd1-4181-bc00-38417b2e3d38",
+      "name": "Neo4j - Vector Search",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hent resultatet fra Neo4j\nconst data = $input.first().json.data;\n\n// Hent kolonnenavne og resultater\nconst fields = data.fields;\nconst values = data.values;\n\n// Omdan resultaterne til læsbare dokumenter\nconst documents = values.map(row => {\n\n    const document = {};\n\n    fields.forEach((field, index) => {\n        document[field] = row[index];\n    });\n\n    return {\n        text: document.text,\n        source: document.source,\n        subject: document.subject,\n        score: document.score\n    };\n});\n\n// Send kun de relevante oplysninger videre\nreturn [{\n    json: {\n        documents: documents\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "0a0ab2a2-3b5d-41bc-be71-027dcf1ee29b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "content": "Genererer en embedding af spørgsmålet med OpenAI.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -144
+      ],
+      "id": "f061f06e-9824-4a4a-97e3-2a850b277000",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Finder relevante tekststykker via semantisk søgning i Neo4j.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        -144
+      ],
+      "id": "7259f400-2a96-4dad-8b75-0e2e06b938b4",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Klargør søgeresultater og kildeinformation til AI-agenten.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -144
+      ],
+      "id": "cef147a4-4ee0-4899-9fef-ba1ab0563bc2",
+      "name": "Sticky Note2"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "question": "What is spectrophotometry?"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Vector Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5c56c551-3158-49fe-8a3c-638e75f6cb1c",
+  "meta": {
+    "instanceId": "d06d9bb05728dfe923fddf1a8ae4febda352b0dd4d377fa2fb8312600e8bde79"
+  },
+  "nodeGroups": [],
+  "id": "bNGul91Tmiu0nvrz",
+  "tags": []
+}

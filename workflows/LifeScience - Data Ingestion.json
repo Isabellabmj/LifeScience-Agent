@@ -1,0 +1,566 @@
+{
+  "name": "LifeScience - Data Ingestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1e43a9e8-76af-445e-a2cb-73427eda5295",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/lifeagent/LifeScience Dokumenter/*.pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "860d1377-1eb6-4b20-8f0b-d59df1004c59",
+      "name": "Read Life Science Documents"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "09bdf70d-58d9-4f8c-b36c-9971f36346a8",
+      "name": "Extract PDF Text"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d0550000-2f16-4730-bb2e-b1ff568772a7",
+              "name": "text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "95a41864-db84-46e5-b666-8688b7803d78",
+              "name": "source",
+              "value": "Analytical Chemistry 2.1 - David Harvey",
+              "type": "string"
+            },
+            {
+              "id": "9794754f-9717-4367-b670-03779d10418a",
+              "name": "subject",
+              "value": "Analytical Chemistry",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "6b87cfbb-5a5d-423d-b512-e868ab733b15",
+      "name": "Prepare Document Metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nconst CHUNK_SIZE = 1200;\nconst OVERLAP = 200;\nconst result = [];\n\nfunction splitLongText(text, maxLength) {\n  const pieces = [];\n  let remaining = text.trim();\n\n  while (remaining.length > maxLength) {\n    const candidate = remaining.slice(0, maxLength);\n\n    // Foretræk at dele ved en sætningsafslutning\n    let splitAt = Math.max(\n      candidate.lastIndexOf(\". \"),\n      candidate.lastIndexOf(\"? \"),\n      candidate.lastIndexOf(\"! \")\n    );\n\n    if (splitAt >= Math.floor(maxLength * 0.5)) {\n      splitAt += 1;\n    } else {\n      // Ellers del ved et mellemrum\n      splitAt = candidate.lastIndexOf(\" \");\n\n      if (splitAt < Math.floor(maxLength * 0.5)) {\n        splitAt = maxLength;\n      }\n    }\n\n    pieces.push(remaining.slice(0, splitAt).trim());\n    remaining = remaining.slice(splitAt).trim();\n  }\n\n  if (remaining) pieces.push(remaining);\n  return pieces;\n}\n\nfor (const item of items) {\n  const { text, source, subject } = item.json;\n\n  if (!text || !text.trim()) continue;\n\n  const paragraphs = text\n    .replace(/\\r\\n/g, \"\\n\")\n    .split(/\\n\\s*\\n/)\n    .map(p => p.replace(/\\s+/g, \" \").trim())\n    .filter(Boolean);\n\n  const segments = paragraphs.flatMap(p =>\n    splitLongText(p, CHUNK_SIZE - OVERLAP)\n  );\n\n  let current = \"\";\n  let chunkIndex = 0;\n\n  function addChunk(content) {\n    const cleaned = content.trim();\n    if (!cleaned) return;\n\n    result.push({\n      json: {\n        text: cleaned,\n        source,\n        subject,\n        chunkIndex,\n        chunkId: `${source.replace(/[^a-zA-Z0-9]/g, \"_\")}_${chunkIndex}`\n      }\n    });\n\n    chunkIndex++;\n  }\n\n  for (const segment of segments) {\n    const combined = current\n      ? current + \"\\n\\n\" + segment\n      : segment;\n\n    if (combined.length <= CHUNK_SIZE) {\n      current = combined;\n    } else {\n      addChunk(current);\n\n      const overlapText = current.slice(-OVERLAP);\n      const available = CHUNK_SIZE - segment.length - 2;\n      const safeOverlap = overlapText.slice(\n        -Math.max(0, available)\n      );\n\n      current = safeOverlap\n        ? safeOverlap + \"\\n\\n\" + segment\n        : segment;\n    }\n  }\n\n  addChunk(current);\n}\nconst tooLong = result.filter(item => item.json.text.length > CHUNK_SIZE);\n\nif (tooLong.length > 0) {\n  throw new Error(\n    `${tooLong.length} chunks er større end ${CHUNK_SIZE} tegn`\n  );\n}\n\nreturn result;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "6b89f1f6-0978-439a-a4e7-50d9983e825d",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "maxItems": 50
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "25a00f36-f917-42d6-be28-18e11a0a1a2d",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  model: \"text-embedding-3-small\",\n  input: $json.text\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "da8602dd-75fb-41a3-8b29-2abda04cc24a",
+      "name": "OpenAI - Generate Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "gE9cN9UBGAhgqK71",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Indlæser PDF-filer fra vores lokale LifeScience-mappe via Docker.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -160
+      ],
+      "id": "9058030a-a3d1-494a-be87-d1e09394da8e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Udtrækker tekstindholdet fra PDF-filen, så det kan behandles.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -144
+      ],
+      "id": "2def80a8-9154-4e83-ae77-d6f6f62476fa",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Tilføjer oplysninger om dokumentets kilde og fagområde.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -144
+      ],
+      "id": "e537e0b7-a275-49f4-9a11-2254a8736107",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "Opdeler teksten i mindre chunks med overlap og tilføjer et unikt chunk-ID.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        864,
+        -144
+      ],
+      "id": "6c3e76ba-7680-48aa-bbb2-5c82d6d7d780",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Begrænser antallet af chunks under test, så vi undgår unødvendige API-kald.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        -160
+      ],
+      "id": "85290548-d305-40c1-89be-f68e3909fd11",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "Omdanner tekst til embeddings med modellen text-embedding-3-small.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        -160
+      ],
+      "id": "40406969-d0c4-4a9b-9256-0b81fee2865a",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "Tester forbindelsen til Neo4j ved at hente en eksisterende metode fra databasen.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2208,
+        -160
+      ],
+      "id": "0fd21a53-9105-4926-bf83-496b29c06578",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hent embeddings fra OpenAI\nconst embeddings = $input.all();\n\n// Hent de chunks, der ikke allerede findes i Neo4j\nconst chunks = $(\"Code in JavaScript1\").all();\n\n// Kontroller at antallet stemmer\nif (embeddings.length !== chunks.length) {\n  throw new Error(\"Antallet af embeddings og chunks stemmer ikke.\");\n}\n\nreturn embeddings.map((item, index) => {\n\n  const chunk = chunks[index].json;\n  const embedding = item.json.data?.[0]?.embedding;\n\n  // Kontroller at embedding har den forventede størrelse\n  if (!Array.isArray(embedding) || embedding.length !== 1536) {\n    throw new Error(`Ugyldig embedding for chunk ${index}`);\n  }\n\n  return {\n    json: {\n      text: chunk.text,\n      source: chunk.source,\n      subject: chunk.subject,\n      chunkIndex: chunk.chunkIndex,\n      chunkId: chunk.chunkId,\n      embedding: embedding\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "192c587b-310c-4292-8d64-38560494dfe1",
+      "name": "Combine Chunk Metadata and Embedding."
+    },
+    {
+      "parameters": {
+        "content": "Samler den oprindelige tekst og metadata med embedding-vektoren fra OpenAI, så oplysningerne kan gemmes sammen i Neo4j.",
+        "height": 336,
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        -288
+      ],
+      "id": "bf6e4d05-f947-4d21-bfc7-2f989b9fa234",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": " MERGE (c:DocumentChunk {chunkId: $chunkId}) SET c.text = $text,     c.source = $source,     c.subject = $subject,     c.chunkIndex = $chunkIndex,     c.embedding = $embedding RETURN c.chunkId AS savedChunkId"
+            },
+            {
+              "name": "parameters",
+              "value": "={{ {\n  chunkId: $json.chunkId,\n  text: $json.text,\n  source: $json.source,\n  subject: $json.subject,\n  chunkIndex: $json.chunkIndex,\n  embedding: $json.embedding\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        0
+      ],
+      "id": "61732ce5-04f1-41e7-be30-abbf44f4bcd3",
+      "name": "Neo4j - Store Document Chunks",
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": "MATCH (c:DocumentChunk {chunkId: $chunkId}) RETURN count(c) > 0 AS exists"
+            },
+            {
+              "name": "parameters",
+              "value": "={{ { chunkId: $json.chunkId } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "5c086ca8-a567-4b45-aaa4-8531497ee55a",
+      "name": "Neo4j - Check Existing Chunks",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4914f1f8-8347-47af-baa3-cd963a027dc6",
+              "leftValue": "={{ $json.data.values[0][0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "cd419d44-4577-43df-bd8e-760df9ebb00e",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hent de 45 chunks, der ikke findes i Neo4j\nconst filteredItems = $input.all();\n\nconst result = [];\n\nfor (let i = 0; i < filteredItems.length; i++) {\n\n  // Find det oprindelige chunk via n8n's item-linking\n  const originalChunk = $(\"Limit\").itemMatching(i).json;\n\n  result.push({\n    json: {\n      text: originalChunk.text,\n      source: originalChunk.source,\n      subject: originalChunk.subject,\n      chunkIndex: originalChunk.chunkIndex,\n      chunkId: originalChunk.chunkId\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "b2d1227a-ad89-425b-a6a8-b3ac4abc9a55",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "content": "Kontrollerer, om chunk-ID allerede findes i Neo4j.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        -160
+      ],
+      "id": "56f9edf1-29e4-485a-81d5-ffdf3f6df104",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "Sender kun chunks videre, som ikke findes i databasen.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        -160
+      ],
+      "id": "08c76318-750a-422e-98c2-3a8bcafa284d",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "Tilføjer tekst og metadata til de nye chunks.",
+        "width": 150,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -160
+      ],
+      "id": "bbd69f67-48b5-4800-b4e9-b948d20f3877",
+      "name": "Sticky Note10"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read Life Science Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Life Science Documents": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Prepare Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Document Metadata": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Check Existing Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Generate Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Combine Chunk Metadata and Embedding.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Chunk Metadata and Embedding.": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Store Document Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Check Existing Chunks": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Generate Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "47ff3028-1d8d-48cd-a705-fb52c6d2bc39",
+  "meta": {
+    "instanceId": "d06d9bb05728dfe923fddf1a8ae4febda352b0dd4d377fa2fb8312600e8bde79"
+  },
+  "nodeGroups": [],
+  "id": "3YXHAyzN7550p3Nj",
+  "tags": []
+}

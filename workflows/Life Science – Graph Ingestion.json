@@ -1,0 +1,293 @@
+{
+  "name": "Life Science – Graph Ingestion.",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7058f46d-56bc-4ecb-8228-7244a3775056",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": "MATCH (c:DocumentChunk) WHERE c.chunkIndex >= 20 RETURN c.text AS text, c.source AS source, c.chunkId AS chunkId ORDER BY c.chunkIndex LIMIT 5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "f36f5734-118b-499a-84c6-bf661c91a6dd",
+      "name": "Neo4j - Get Document Chunks.",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hent resultaterne fra Neo4j\nconst items = $input.all();\n\nconst result = [];\n\nfor (const item of items) {\n\n  // Neo4j returnerer data i et values-array\n  const rows = item.json.data?.values ?? [];\n\n  for (const row of rows) {\n\n    result.push({\n      json: {\n        text: row[0],\n        source: row[1],\n        chunkId: row[2]\n      }\n    });\n\n  }\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "360a53f9-12da-4bda-b0bc-326d345d0f22",
+      "name": "Prepare Text for Graph",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "You extract scientific concepts and relationships from analytical chemistry and microbiology texts.\n\nOnly extract relationships explicitly supported by the provided text.\n\nReturn valid JSON in this format:\n{\n  \"relationships\": [\n    {\n      \"source\": \"Spectrophotometry\",\n      \"relationship\": \"USED_IN\",\n      \"target\": \"Analytical Chemistry\"\n    }\n  ]\n}\n\nRules:\n- Extract at most 3 relationships per text.\n- Use short scientific concept names.\n- Use uppercase relationship types with underscores.\n- Do not invent relationships.\n- If no scientific relationships are found, return {\"relationships\":[]}.\n- Return JSON only."
+            },
+            {
+              "content": "={{ $json.text }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "7511b020-d72a-4d85-b9cd-bfb675968c1e",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "gE9cN9UBGAhgqK71",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of $input.all()) {\n\n  // Hent AI'ens svar\n  let text = item.json.output?.[0]?.content?.[0]?.text;\n\n  if (!text) continue;\n\n  // Fjern ```json og ``` fra AI'ens svar\n  text = text\n    .replace(/```json\\s*/gi, \"\")\n    .replace(/```\\s*/g, \"\")\n    .trim();\n\n  // Omdan teksten til JSON\n  const data = JSON.parse(text);\n\n  // Gennemgå relationerne\n  for (const relation of data.relationships ?? []) {\n\n    results.push({\n      json: {\n        source: relation.source,\n        relationship: relation.relationship,\n        target: relation.target\n      }\n    });\n\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "04997c85-f467-4edb-b217-3e5d78ee4a60",
+      "name": "Prepare Graph Relationships"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:7474/db/neo4j/query/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "statement",
+              "value": "MERGE (a:ScientificConcept {name: $source}) MERGE (b:ScientificConcept {name: $target}) MERGE (a)-[r:RELATED_TO {type: $relationship}]->(b) RETURN a.name AS source, r.type AS relationship, b.name AS target"
+            },
+            {
+              "name": "parameters",
+              "value": "={{ {   source: $json.source,   relationship: $json.relationship,   target: $json.target } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "864138cd-0dab-4228-9b75-abe0c418b14a",
+      "name": "Neo4j - Store Graph Relationships",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "nvYiqyKl3QYRZv1H",
+          "name": "Neo4j - LifeScience-RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "\nHenter eksisterende tekststykker fra Neo4j.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -144
+      ],
+      "id": "d20612cf-4a5c-4635-8752-ddd453f77229",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Klargør tekst og metadata til AI.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -144
+      ],
+      "id": "123a8c09-896f-432d-ae4b-0f2351831130",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Bruger AI til at identificere faglige begreber og relationer.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        688,
+        -144
+      ],
+      "id": "8a3b625f-719a-4df7-84d9-555d1e0c54cd",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "Omdanner AI'ens svar til JSON-objekter.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -160
+      ],
+      "id": "da2849e8-9329-4054-815b-470352d84f27",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Gemmer begreber og relationer i Neo4j.",
+        "width": 160,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        -144
+      ],
+      "id": "e1ac8184-76c2-4793-a145-fda1a1e8d757",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Get Document Chunks.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Get Document Chunks.": {
+      "main": [
+        [
+          {
+            "node": "Prepare Text for Graph",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Text for Graph": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Prepare Graph Relationships",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Graph Relationships": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Store Graph Relationships",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3caabb81-661b-4bee-b0af-221b74efe6e7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d06d9bb05728dfe923fddf1a8ae4febda352b0dd4d377fa2fb8312600e8bde79"
+  },
+  "nodeGroups": [],
+  "id": "48PwBDnB3rVtokiS",
+  "tags": []
+}
