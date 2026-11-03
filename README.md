@@ -133,7 +133,7 @@ en detaljeret beregning af nikkelindholdet.
 
 ![Data hentet fra Neo4j via Vector Search Tool](screenshots/vector-retrieved-data.png)
 
- ### Test 3 – Vector RAG og Graph RAG: spørgsmål: What is analytical chemistry, which concepts is it related to, and what does the textbook explain about its methods? Use both vector search and graph search.
+ ### Test 3 – Vector RAG og Graph RAG: spørgsmål: What is analytical chemistry, which concepts is it related to, and what does the textbook explain about its methods? 
 
  ![Test 3 - Vector RAG og Graph RAG](screenshots/vector-graph-svar.png)
 
