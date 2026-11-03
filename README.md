@@ -71,31 +71,37 @@ Tekststykkerne anvendes til 2 formål:
 
   AI agenten modtager spørgsmål fra brugeren og anvender OpenAI til at generere svar. Agenten har adgang til både Vector Search Tool og Graph Serch Tool og kan dermed kombinere information fra tekststykker med relationer mellem faglige begreber.
 
-  ## Neo4j database
+## Neo4j database
 
-  Vector RAG:
+Vector RAG:
 
   - Dokument chunk: indeholder tekst, kilde, ID chunks og embeddings
   - document_chunk_vector_index: vector index til sematisk søgning
   - Embeddings har 1536 dimensioner
 
-  Billedet viser 38 DocumentChunk-noder og 90 SIMILAR_TO-relationer. Relationerne viser semantisk lighed mellem tekststykkerne baseret på deres embeddings. Selve Vector RAG-søgningen udføres ved hjælp af et vector index i Neo4j.
+Billedet viser 38 DocumentChunk-noder og 90 SIMILAR_TO-relationer. Relationerne viser semantisk lighed mellem tekststykkerne baseret på deres embeddings. Selve Vector RAG-søgningen udføres ved hjælp af et vector index i Neo4j.
 
-  ![Vector RAG database](screenshots/vector.png)
+![Vector RAG database](screenshots/vector.png)
 
-  Graph RAG:
+Graph RAG:
 
   - ScientificConcept: indeholder faglige begreber
   - RELATED_TO: Forbinder begreberne
   - type: angiver den specifikke relation mellem begrebene
 
-  Databasen indeholder 50 DocumentChunk-noder og 132 RELATED_TO-relationer samt 2 USED_IN-relationer. Derudover er der oprettet 90 SIMILAR_TO-relationer mellem tekststykkerne for at visualisere semantisk lighed.
+Databasen indeholder 50 DocumentChunk-noder og 132 RELATED_TO-relationer samt 2 USED_IN-relationer. Derudover er der oprettet 90 SIMILAR_TO-relationer mellem tekststykkerne for at visualisere semantisk lighed.
 
-  Billedet viser 27 ScientificConcept-noder og 21 RELATED_TO-relationer mellem faglige begreber i Neo4j.
+Billedet viser 27 ScientificConcept-noder og 21 RELATED_TO-relationer mellem faglige begreber i Neo4j.
 
-  ![Graph RAG database](screenshots/graph.png)
+![Graph RAG database](screenshots/graph.png)
 
- ## Test - svar:
+### Visualisering af grafdatabasen i Neo4j
+
+Grafen viser 155 forbundne noder og 224 relationer. Noderne repræsenterer blandt andet tekststykker, faglige begreber og metoder. Relationerne viser, hvordan de forskellige noder er forbundet med hinanden.
+
+![Oversigt over noder og relationer i Neo4j](screenshots/neo4j-graph-overview.png)
+
+## Test - svar:
 
 ### Test 1 – Graph RAG:Spørgsmål:  What is analytical chemistry related to?
 
