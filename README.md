@@ -56,7 +56,7 @@ Tekststykkerne anvendes til 2 formål:
   ## Graph ingestion
 
   Workflowet henter eksisterende tekststykker fra Neo4j og bruger OpenAI til at identificere faglige begreber og relationer. Begreberne gemmes som ScientificConcept-noder og forbindes med RELATED_TO-relationer. Den specifikke relationstype gemmes som en property.
-  Der er oprettet 21 relationer i prototypen.
+  Graph Ingestion har oprettet 21 RELATED_TO-relationer mellem ScientificConcept-noder i prototypen.
 
   ## Vector Search Tool
 
@@ -79,7 +79,9 @@ Tekststykkerne anvendes til 2 formål:
   - document_chunk_vector_index: vector index til sematisk søgning
   - Embeddings har 1536 dimensioner
 
-  ![Vector RAG database](screenshots/chunk.png)
+  Billedet viser 38 DocumentChunk-noder og 90 SIMILAR_TO-relationer. Relationerne viser semantisk lighed mellem tekststykkerne baseret på deres embeddings. Selve Vector RAG-søgningen udføres ved hjælp af et vector index i Neo4j.
+
+  ![Vector RAG database](screenshots/vector.png)
 
   Graph RAG:
 
@@ -87,9 +89,11 @@ Tekststykkerne anvendes til 2 formål:
   - RELATED_TO: Forbinder begreberne
   - type: angiver den specifikke relation mellem begrebene
 
-  Databasen indeholder 50 DocumentChunk-noder og 21 AI-genererede faglige relationer. Derudover er der oprettet 90 SIMILAR_TO-relationer mellem tekststykkerne for at visualisere semantisk lighed.
+  Databasen indeholder 50 DocumentChunk-noder og 132 RELATED_TO-relationer samt 2 USED_IN-relationer. Derudover er der oprettet 90 SIMILAR_TO-relationer mellem tekststykkerne for at visualisere semantisk lighed.
 
-  ![Graph RAG database](screenshots/graph-RAG.png)
+  Billedet viser 27 ScientificConcept-noder og 21 RELATED_TO-relationer mellem faglige begreber i Neo4j.
+
+  ![Graph RAG database](screenshots/graph.png)
 
  ## Test - svar:
 
@@ -108,6 +112,7 @@ begreber fra databasen.
 **Begrænsning:** Svaret er forholdsvis generelt og forklarer ikke
 relationerne mellem begreberne særlig detaljeret.
 
+![Relationer hentet fra Neo4j via Graph Search Tool](screenshots/graph-retrieved-data.png)
 
 
 
@@ -125,6 +130,8 @@ kan bestemmes ved hjælp af dimethylglyoxim (dmg).
 
 **Begrænsning:** Svaret beskriver metoden, men indeholder ikke
 en detaljeret beregning af nikkelindholdet.
+
+![Data hentet fra Neo4j via Vector Search Tool](screenshots/vector-retrieved-data.png)
 
  ### Test 3 – Vector RAG og Graph RAG: spørgsmål: What is analytical chemistry, which concepts is it related to, and what does the textbook explain about its methods? Use both vector search and graph search.
 
